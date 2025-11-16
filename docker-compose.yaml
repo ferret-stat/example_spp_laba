@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  backend:
+    container_name: fastapi-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - db
+      - minio
+    ports:
+      - "8000:8000"  
+    volumes:
+      - file_storage:/storage/files
+      - logs:/storage/logs
+    networks:
+      - app_network
+
+  frontend:
+    container_name: frontend-app
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    networks:
+      - app_network
+
+  nginx:
+    container_name: nginx-proxy
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - file_storage:/storage/files
+      - logs:/storage/logs
+    networks:
+      - app_network
+
+  db:
+    container_name: postgres-db
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: apppassword
+    ports:
+      - "5432:5432"  
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  minio:
+    container_name: minio-storage
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"  
+      - "9001:9001"  
+    volumes:
+      - minio_data:/data
+    networks:
+      - app_network
+
+  minio_create_bucket:
+    container_name: minio-bucket-init
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb local/app-files;
+      mc anonymous set download local/app-files;
+      exit 0;
+      "
+    networks:
+      - app_network
+
+networks:
+  app_network:
+
+volumes:
+  pgdata:
+  file_storage:
+  logs:
+  minio_data:
