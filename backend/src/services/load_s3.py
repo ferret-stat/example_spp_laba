@@ -17,7 +17,7 @@ local_filename = "downloaded_test.pdf"
 
 s3.download_file(EnvConfig.S3_BUCKET, object_key, local_filename)
 
-print("✅ Файл скачан:", local_filename)
+print("Файл скачан:", local_filename)
 
 # import boto3
 # from botocore.client import Config
