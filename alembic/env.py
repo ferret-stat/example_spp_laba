@@ -10,9 +10,32 @@ from alembic import context
 load_dotenv()
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
+
+
+def create_database_if_not_exists(url: str):
+    parsed_url = make_url(url)
+    db_name = parsed_url.database
+    tmp_url = parsed_url.set(database="postgres")  # системная БД Postgres
+    engine = create_engine(tmp_url)
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"
+        )
+        exists = result.scalar() is not None
+
+    if not exists:
+        print(f"Creating database {db_name}...")
+        with engine.connect() as conn:
+            conn.execution_options(isolation_level="AUTOCOMMIT").execute(
+                f"CREATE DATABASE {db_name}"
+            )
+
+
 config = context.config
 database_url = os.getenv("POSTGRES_URL")
-
+create_database_if_not_exists(database_url)
+config.set_main_option("sqlalchemy.url", database_url)
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
