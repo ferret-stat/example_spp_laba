@@ -7,3 +7,4 @@ minio
 pandas
 boto3
 dotenv
+alembic
