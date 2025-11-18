@@ -1,9 +1,10 @@
 import datetime
 
 from fastapi import APIRouter, HTTPException, Depends, status
-from sqlalchemy import text
+from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
+from src.database.models import User
 from src.database.schemas import UserCreate, UserOut
 from src.database.get_db import get_db
 from src.utils.utils import hash_password, generate_user_id
@@ -25,17 +26,14 @@ async def create_new_user(
             detail="Заполните!!!!"
         )
 
-    if user_data.email or user_data.phone:
-        existing_user = db.execute(
-            text("""
-            SELECT id FROM public.users 
-            WHERE email = :email OR phone = :phone
-            """),
-            {
-                "email": user_data.email,
-                "phone": user_data.phone
-            }
-        ).fetchone()
+    conditions = []
+    if user_data.email:
+        conditions.append(User.email == user_data.email)
+    if user_data.phone:
+        conditions.append(User.phone == user_data.phone)
+
+    if conditions:
+        existing_user = db.scalar(select(User.id).where(or_(*conditions)))
 
         if existing_user:
             raise HTTPException(
@@ -43,27 +41,12 @@ async def create_new_user(
                 detail="Пользователь с таким email или телефоном уже существует"
             )
 
-    hashed_password = hash_password(user_data.password)
-
     new_user_id = generate_user_id()
-    current_time = datetime.datetime.now()
 
-    db.execute(
-        text("""
-        INSERT INTO public.users 
-        (id, email, phone, hashed_password, is_active, is_superuser, created_at)
-        VALUES (:id, :email, :phone, :hashed_password, :is_active, :is_superuser, :created_at)
-        """),
-        {
-            "id": new_user_id,
-            "email": user_data.email,
-            "phone": user_data.phone,
-            "hashed_password": hashed_password,
-            "is_active": True,
-            "is_superuser": False,
-            "created_at": current_time
-        }
-    )
+    new_user = User(email=user_data.email,
+                    phone=user_data.phone,
+                    hashed_password=hash_password(user_data.password))
+    db.add(new_user)
     db.commit()
 
     return {

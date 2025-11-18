@@ -5,7 +5,7 @@ from jose import jwt
 from src.utils.get_env import EnvConfig
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):

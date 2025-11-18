@@ -5,13 +5,14 @@ from sqlalchemy import create_engine, pool, text
 from sqlalchemy.engine.url import make_url
 from alembic import context
 
-from src.models.models import Base
+from src.database.models import Base
 
 load_dotenv()
 
 config = context.config
 
 database_url = os.getenv("POSTGRES_URL")
+
 
 def create_database_if_not_exists(url: str):
     parsed_url = make_url(url)
@@ -31,6 +32,7 @@ def create_database_if_not_exists(url: str):
             conn.execution_options(isolation_level="AUTOCOMMIT").execute(
                 text(f"CREATE DATABASE {db_name}")
             )
+
 
 create_database_if_not_exists(database_url)
 
@@ -74,4 +76,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-
