@@ -8,3 +8,6 @@ pandas
 boto3
 dotenv
 alembic
+pydantic[email]
+bcrypt
+python-jose
