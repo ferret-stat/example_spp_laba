@@ -1,22 +1,18 @@
-import React from "react";
-import { Routes, Route, Link } from "react-router-dom";
-import Login from "./pages/Login.jsx";
-import Register from "./pages/Register.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
-import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import { Routes, Route } from "react-router-dom";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Dashboard from "./pages/Dashboard";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Navbar from "./components/Navbar";
 
-export default function App() {
+function Home() {
+  return <h1>Добро пожаловать на домашнюю страницу</h1>;
+}
+
+function App() {
   return (
-    <div>
-      <header>
-        <nav>
-          <Link to="/">Home</Link>
-          <Link to="/login">Login</Link>
-          <Link to="/register">Register</Link>
-          <Link to="/dashboard">Dashboard</Link>
-        </nav>
-      </header>
-
+    <>
+      <Navbar />
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -32,15 +28,8 @@ export default function App() {
           />
         </Routes>
       </main>
-    </div>
+    </>
   );
 }
 
-function Home() {
-  return (
-    <div>
-      <h1>Welcome</h1>
-      <p>Example React frontend for FastAPI JWT auth.</p>
-    </div>
-  );
-}
+export default App;
