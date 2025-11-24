@@ -19,3 +19,9 @@ class EnvConfig:
 
     POSTGRES_URL = os.getenv("POSTGRES_URL")
     STATIC_TOKEN = os.getenv("POSTGRES_URL")
+
+    MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+    MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_PASSWORD")
+    MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
+    MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")
+    MINIO_ROOT_USER = os.getenv("MINIO_ROOT_USER")
