@@ -1,7 +1,7 @@
 import uuid
 
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, UUID
+from sqlalchemy import Column, String, Boolean, DateTime, UUID, Integer, BigInteger, UniqueConstraint
 from sqlalchemy.orm import declarative_base, Mapped
 
 
@@ -53,3 +53,14 @@ class User(Base):
             f"<User(id={self.id}, email='{self.email}', "
             f"is_superuser={self.is_superuser})>"
         )
+    
+class MinioObject(Base):
+    __tablename__ = "minio_objects"
+
+    id = Column(UUID, primary_key=True)
+    bucket = Column(String, nullable=False)
+    object_name = Column(String, nullable=False)
+    size = Column(BigInteger)
+    etag = Column(String)
+    last_modified = Column(DateTime)
+    user_id = Column(UUID)
