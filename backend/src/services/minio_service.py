@@ -2,11 +2,11 @@ import uuid
 
 from io import BytesIO
 from minio import Minio
+from sqlalchemy.orm import Session 
 
 from src.utils.get_env import EnvConfig
 from src.utils.pg_sync import sync_bucket
 from src.database.models import MinioObject
-from src.database.get_db import SessionLocal
 
 client = Minio(
     EnvConfig.MINIO_ENDPOINT,
@@ -15,21 +15,38 @@ client = Minio(
     secure=False
 )
 
-def list_files(page: int = 1, page_size: int = 10):
-    objects = client.list_objects(EnvConfig.MINIO_BUCKET_NAME, recursive=True)
-    files = [
-        {
-            "name": obj.object_name,
+def list_files(
+    session: Session,
+    page: int = 1,
+    page_size: int = 10,
+):
+    objects = client.list_objects(
+        EnvConfig.MINIO_BUCKET_NAME,
+        recursive=True
+    )
+    files = []
+    ids = []
+    for obj in objects:
+        ids.append(uuid.UUID(obj.object_name))
+        files.append({
+            "id": obj.object_name,
             "size": obj.size,
             "last_modified": obj.last_modified,
-        }
-        for obj in objects
-    ]
+        })
+    db_objects = (
+        session.query(MinioObject)
+        .filter(MinioObject.id.in_(ids))
+        .all()
+    )
+
+    names_map = {str(obj.id): obj.object_name for obj in db_objects}
+    for f in files:
+        f["object_name"] = names_map.get(f["id"])
 
     total = len(files)
     start = (page - 1) * page_size
     end = start + page_size
-    sync_bucket(None)
+
     return {
         "files": files[start:end],
         "total": total,
@@ -37,11 +54,12 @@ def list_files(page: int = 1, page_size: int = 10):
         "pages": (total + page_size - 1) // page_size,
     }
 
+
 def get_file_url(filename: str):
     return client.presigned_get_object(EnvConfig.MINIO_BUCKET_NAME, filename)
 
 
-def upload_file(file, filename: str):
+def upload_file(session: Session, file, filename: str):
     file_bytes = file.file.read()
     file_size = len(file_bytes)
     if file_size == 0:
@@ -53,10 +71,8 @@ def upload_file(file, filename: str):
         bucket=EnvConfig.MINIO_BUCKET_NAME,
         object_name=filename
     )
-    with SessionLocal() as curr:
-        curr.add(obj)
-        curr.commit()
-
+    session.add(obj)
+    session.commit()
     client.put_object(
         bucket_name=EnvConfig.MINIO_BUCKET_NAME,
         object_name=str(id),
@@ -64,7 +80,7 @@ def upload_file(file, filename: str):
         length=file_size,
         content_type=file.content_type
     )
-    sync_bucket(None)
+    sync_bucket(session, None)
 
     return {"message": "Файл загружен", "filename": filename}
 
