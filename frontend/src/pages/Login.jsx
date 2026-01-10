@@ -15,7 +15,7 @@ export default function Login() {
     if (!identifier || !password) return alert("Заполните все поля");
 
     try {
-      const response = await fetch("http://localhost:8000/auth/login", {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, password }),
@@ -30,7 +30,7 @@ export default function Login() {
 
       login(data.access_token);
 
-      navigate("/dashboard");
+      navigate("/files");
     } catch (err) {
       console.error(err);
       alert("Ошибка сервера");

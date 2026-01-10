@@ -1,4 +1,4 @@
-from sqlalchemy import text, select, or_
+from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, HTTPException, Depends
 

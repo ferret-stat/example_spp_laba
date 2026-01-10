@@ -1,7 +1,9 @@
-from fastapi import APIRouter, UploadFile, File, Depends
+from minio.error import S3Error
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from src.database.get_db import get_db
-from src.services.minio_service import list_files, get_file_url, upload_file, delete_file
+from src.services.minio_service import list_files, download_file, upload_file, delete_file
 
 router = APIRouter(
     prefix="/files",
@@ -17,8 +19,20 @@ async def list_all(db: Session = Depends(get_db), page: int = 1, page_size: int 
     return list_files(db, page, page_size)
 
 @router.get("/download/{filename}")
-async def download(filename: str):
-    return {"url": get_file_url(filename)}
+async def download(filename: str, db: Session = Depends(get_db)):
+    try:
+        obj, obj_name = download_file(db, filename)
+        return StreamingResponse(
+            obj,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{obj_name}"'
+            }
+        )
+    
+    except S3Error as e:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+
 
 @router.delete("/delete/{filename}")
 async def delete(filename: str):

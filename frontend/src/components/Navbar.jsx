@@ -31,6 +31,11 @@ export default function Navbar() {
           Dashboard
         </Link>
       )}
+      {isAuthenticated() && (
+        <Link to="/files" style={{ marginRight: "10px" }}>
+          Файлы
+        </Link>
+      )}
       {isAuthenticated() && <button onClick={handleLogout}>Выйти</button>}
     </nav>
   );

@@ -1,7 +1,7 @@
 import uuid
 
 from io import BytesIO
-from minio import Minio
+from minio import Minio, S3Error
 from sqlalchemy.orm import Session 
 
 from src.utils.get_env import EnvConfig
@@ -90,3 +90,18 @@ def delete_file(filename: str):
 
 def get_file_url(filename: str):
     return client.presigned_get_object(EnvConfig.MINIO_BUCKET_NAME, filename)
+
+def download_file(session: Session, file_id: str):
+    file_uuid = uuid.UUID(file_id)
+    db_object = (
+        session.query(MinioObject)
+        .filter(MinioObject.id == file_uuid)
+        .one_or_none()
+    )
+
+    obj = client.get_object(
+        EnvConfig.MINIO_BUCKET_NAME,
+        file_id
+    )
+
+    return obj, db_object.object_name
