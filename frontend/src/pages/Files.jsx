@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getFiles, downloadFile } from "../api/files";
+import api from "../api/api";
 import "./files.css";
 
 const formatSize = (bytes) => {
@@ -27,6 +28,198 @@ const formatDate = (iso) => {
   });
 };
 
+function SortSelect({ value, onChange, disabled }) {
+  const [open, setOpen] = useState(false);
+
+  const options = [
+    { value: "last_modified", label: "Дате" },
+    { value: "object_name", label: "Имени" },
+    { value: "size", label: "Размеру" },
+  ];
+
+  const current = options.find((o) => o.value === value) ?? options[0];
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onClickOutside = (e) => {
+      if (!e.target.closest?.(".sort-dd")) setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onClickOutside);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onClickOutside);
+    };
+  }, []);
+
+  return (
+    <div className="sort-dd">
+      <button
+        type="button"
+        className="btn btn-ghost sort-dd-btn"
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {current.label}
+        <span
+          className={`sort-dd-caret ${open ? "is-open" : ""}`}
+          aria-hidden="true"
+        >
+          ▾
+        </span>
+      </button>
+
+      {open && !disabled && (
+        <div
+          className="sort-dd-menu"
+          role="listbox"
+          aria-label="Сортировать по"
+        >
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className={`sort-dd-item ${
+                opt.value === value ? "is-active" : ""
+              }`}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+              role="option"
+              aria-selected={opt.value === value}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TagsMultiSelect({
+  options,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  onOpen,
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const onClickOutside = (e) => {
+      if (!e.target.closest?.(".tags-dd")) setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onClickOutside);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onClickOutside);
+    };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return options;
+    return options.filter((t) => String(t).toLowerCase().includes(s));
+  }, [options, q]);
+
+  const toggle = (tag) => {
+    if (value.includes(tag)) onChange(value.filter((x) => x !== tag));
+    else onChange([...value, tag]);
+  };
+
+  const clear = () => onChange([]);
+
+  const buttonText =
+    value.length > 0 ? `Выбрано: ${value.length}` : placeholder;
+
+  return (
+    <div className="tags-dd">
+      <button
+        type="button"
+        className="btn btn-ghost tags-dd-btn"
+        onClick={() => {
+          setOpen((v) => {
+            const next = !v;
+            if (next && onOpen) onOpen();
+            return next;
+          });
+        }}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {buttonText}
+        <span
+          className={`tags-dd-caret ${open ? "is-open" : ""}`}
+          aria-hidden="true"
+        >
+          ▾
+        </span>
+      </button>
+
+      {open && !disabled && (
+        <div className="tags-dd-menu" role="listbox" aria-label="Теги">
+          <div className="tags-dd-top">
+            <input
+              className="tags-dd-search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Поиск по тегам…"
+              autoFocus
+            />
+            <button
+              type="button"
+              className="btn btn-ghost tags-dd-clear"
+              onClick={clear}
+              disabled={value.length === 0}
+              title="Сбросить"
+            >
+              Сбросить
+            </button>
+          </div>
+
+          <div className="tags-dd-list">
+            {filtered.length === 0 ? (
+              <div className="tags-dd-empty">Ничего не найдено</div>
+            ) : (
+              filtered.map((tag) => {
+                const checked = value.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={`tags-dd-item ${checked ? "is-active" : ""}`}
+                    onClick={() => toggle(tag)}
+                    role="option"
+                    aria-selected={checked}
+                  >
+                    <span className="tags-dd-check" aria-hidden="true">
+                      {checked ? "✓" : ""}
+                    </span>
+                    <span className="tags-dd-text">{tag}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Files() {
   const [files, setFiles] = useState([]);
   const [page, setPage] = useState(1);
@@ -36,6 +229,14 @@ export default function Files() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [sortBy, setSortBy] = useState("last_modified");
+  const [sortDir, setSortDir] = useState("desc");
+
+  const [selectedTags, setSelectedTags] = useState([]);
+
+  const [availableTags, setAvailableTags] = useState([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+
   const limit = 10;
 
   const canPrev = page > 1 && !loading;
@@ -44,29 +245,74 @@ export default function Files() {
   const pageTitle = useMemo(() => {
     if (loading) return "Загрузка…";
     if (error) return "Ошибка";
-    return "Мои файлы";
+    return "Библиотека";
   }, [loading, error]);
 
-  const loadFiles = async (pageNumber) => {
-    try {
-      setError("");
-      setLoading(true);
-      const data = await getFiles(pageNumber, limit);
-      const list = data.files ?? [];
-      setFiles(list);
-      setTotal(data.total ?? 0);
-      setPage(data.page ?? pageNumber);
-      setTotalPages(data.pages ?? 1);
-    } catch (e) {
-      console.error("Ошибка загрузки файлов", e);
-      setError("Не удалось загрузить файлы. Попробуйте ещё раз.");
-    } finally {
-      setLoading(false);
-    }
+  const removeTag = (tag) => {
+    setSelectedTags((prev) => prev.filter((t) => t !== tag));
   };
+
+  const loadFiles = useCallback(
+    async (pageNumber) => {
+      try {
+        setError("");
+        setLoading(true);
+
+        const data = await getFiles(pageNumber, limit, {
+          sortBy,
+          sortDir,
+          tags: selectedTags,
+        });
+
+        const list = data.files ?? [];
+        setFiles(list);
+        setTotal(data.total ?? 0);
+        setPage(data.page ?? pageNumber);
+        setTotalPages(data.pages ?? 1);
+      } catch (e) {
+        console.error("Ошибка загрузки файлов", e);
+        setError("Не удалось загрузить файлы. Попробуйте ещё раз.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [limit, sortBy, sortDir, selectedTags]
+  );
 
   useEffect(() => {
     loadFiles(1);
+  }, [loadFiles]);
+
+  const loadTags = useCallback(async () => {
+    try {
+      setTagsLoading(true);
+
+      const res = await api.get("/files/tags", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+
+      const data = res.data;
+
+      let tags = [];
+      if (Array.isArray(data)) {
+        tags = data.map((x) => x?.name).filter(Boolean);
+      }
+
+      tags = Array.from(new Set(tags)).sort((a, b) =>
+        String(a).localeCompare(String(b), "ru")
+      );
+
+      setAvailableTags(tags);
+
+      setSelectedTags((prev) => prev.filter((t) => tags.includes(t)));
+    } catch (e) {
+      console.error("Ошибка загрузки тегов", e);
+      setAvailableTags([]);
+    } finally {
+      setTagsLoading(false);
+    }
   }, []);
 
   const handleDownload = async (id) => {
@@ -76,6 +322,10 @@ export default function Files() {
       console.error("Ошибка скачивания", e);
       alert("Не удалось скачать файл");
     }
+  };
+
+  const toggleSortDir = () => {
+    setSortDir((prev) => (prev === "desc" ? "asc" : "desc"));
   };
 
   const visibleFiles = useMemo(() => files.slice(0, limit), [files, limit]);
@@ -90,18 +340,71 @@ export default function Files() {
           <div>
             <h2 className="files-title">{pageTitle}</h2>
             <p className="files-subtitle">
-              Управляйте файлами и скачивайте их в один клик
+              Скачивайте файлы в один клик из нашей библиотеки!
             </p>
           </div>
 
-          <button
-            className="btn btn-ghost"
-            onClick={() => loadFiles(page)}
-            disabled={loading}
-            title="Обновить"
-          >
-            Обновить
-          </button>
+          <div className="files-actions">
+            <div className="sort-control">
+              <span className="sort-label">Сортировать по: </span>
+              <SortSelect
+                value={sortBy}
+                onChange={setSortBy}
+                disabled={loading}
+              />
+            </div>
+
+            <button
+              className="btn btn-ghost"
+              onClick={toggleSortDir}
+              disabled={loading}
+              title="Направление сортировки"
+            >
+              {sortDir === "desc" ? "По убыванию" : "По возрастанию"}
+            </button>
+
+            <button
+              className="btn btn-ghost"
+              onClick={() => loadFiles(page)}
+              disabled={loading}
+              title="Обновить"
+            >
+              Обновить
+            </button>
+          </div>
+        </div>
+
+        <div className="files-filters">
+          <div className="filters-title">Теги:</div>
+
+          <div className="filters-row">
+            <TagsMultiSelect
+              options={availableTags}
+              value={selectedTags}
+              onChange={setSelectedTags}
+              disabled={loading || tagsLoading}
+              placeholder={tagsLoading ? "Загрузка…" : "Выберите теги"}
+              onOpen={loadTags}
+            />
+
+            <div className="selected-tags">
+              {selectedTags.map((tag) => (
+                <span key={tag} className="tag-pill">
+                  <span className="tag-pill-text">{tag}</span>
+                  <button
+                    type="button"
+                    className="tag-pill-x"
+                    onClick={() => removeTag(tag)}
+                    disabled={loading}
+                    aria-label={`Убрать тег ${tag}`}
+                    title="Убрать"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
         {error ? (

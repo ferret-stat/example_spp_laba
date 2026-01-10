@@ -2,11 +2,13 @@ import uuid
 
 from io import BytesIO
 from minio import Minio, S3Error
+from typing import Iterable
+from sqlalchemy import func
 from sqlalchemy.orm import Session 
 
 from src.utils.get_env import EnvConfig
-from src.utils.pg_sync import sync_bucket
-from src.database.models import MinioObject
+from src.utils.pg_utils import sync_bucket, load_format_tag, text_to_uuid, get_format, load_object_tags
+from src.database.models import MinioObject, MinioObjectTag, Tag
 
 client = Minio(
     EnvConfig.MINIO_ENDPOINT,
@@ -15,36 +17,103 @@ client = Minio(
     secure=False
 )
 
+def normalize_tags(tags):
+    if not tags:
+        return []
+    if isinstance(tags, str):
+        return [tags.strip().lower()] if tags.strip() else []
+    return [t.strip().lower() for t in tags if t and t.strip()]
+
 def list_files(
     session: Session,
     page: int = 1,
     page_size: int = 10,
+    sort_by: str = "last_modified",   # "size", "object_name", "last_modified"
+    sort_dir: str = "desc",           # "asc", "desc",
+    tags: Iterable[str] | None = None, 
 ):
     objects = client.list_objects(
         EnvConfig.MINIO_BUCKET_NAME,
         recursive=True
     )
+    # tags = [t.strip().lower() for t in (tags or []) if t and t.strip()]
+    tags = normalize_tags(tags)
+    print(tags)
     files = []
     ids = []
     for obj in objects:
-        ids.append(uuid.UUID(obj.object_name))
+        obj_id = uuid.UUID(obj.object_name)
+        ids.append(obj_id)
         files.append({
-            "id": obj.object_name,
+            "id": str(obj_id),
             "size": obj.size,
             "last_modified": obj.last_modified,
         })
+
+    if not ids:
+        return {"files": [], "total": 0, "page": page, "pages": 0}
+    
+    if tags:
+        tag_ids = (
+            session.query(Tag.id)
+            .filter(Tag.name.in_(tags))
+            .subquery()
+        )
+
+        filtered_ids = (
+            session.query(MinioObjectTag.minio_object_id)
+            .filter(MinioObjectTag.tag_id.in_(tag_ids))
+            .distinct()
+            .all()
+        )
+
+        allowed_ids = {row[0] for row in filtered_ids}
+        ids = [i for i in ids if i in allowed_ids]
+        files = [f for f in files if uuid.UUID(f["id"]) in allowed_ids]
+        print(files)
+
+        if not ids:
+            return {"files": [], "total": 0, "page": page, "pages": 0}
+
     db_objects = (
         session.query(MinioObject)
         .filter(MinioObject.id.in_(ids))
         .all()
     )
+    names_map = {str(o.id): o.object_name for o in db_objects}
 
-    names_map = {str(obj.id): obj.object_name for obj in db_objects}
+    tag_rows = (
+        session.query(MinioObjectTag.minio_object_id, Tag.name)
+        .join(Tag, Tag.id == MinioObjectTag.tag_id)
+        .filter(MinioObjectTag.minio_object_id.in_(ids))
+        .all()
+    )
+
+    tags_map: dict[str, list[str]] = {}
+    for obj_id, tag_name in tag_rows:
+        tags_map.setdefault(str(obj_id), []).append(tag_name)
+
     for f in files:
         f["object_name"] = names_map.get(f["id"])
+        f["tags"] = tags_map.get(f["id"], [])
+
+    # Сортировка
+    allowed = {"size", "object_name", "last_modified"}
+    if sort_by not in allowed:
+        sort_by = "last_modified"
+
+    reverse = (sort_dir.lower() == "desc")
+
+    def sort_key(item):
+        v = item.get(sort_by)
+        if sort_by == "object_name":
+            return (v is None, (v or "").lower())
+        return (v is None, v)
+
+    files.sort(key=sort_key, reverse=reverse)
 
     total = len(files)
-    start = (page - 1) * page_size
+    start = max(0, (page - 1) * page_size)
     end = start + page_size
 
     return {
@@ -52,8 +121,24 @@ def list_files(
         "total": total,
         "page": page,
         "pages": (total + page_size - 1) // page_size,
+        "sort": {"by": sort_by, "dir": "desc" if reverse else "asc"},
     }
 
+def get_tags(session):
+    tags = (
+        session.query(Tag)
+        .order_by(Tag.name.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": str(tag.id),
+            "name": tag.name,
+            "created_at": tag.created_at,
+        }
+        for tag in tags
+    ]
 
 def get_file_url(filename: str):
     return client.presigned_get_object(EnvConfig.MINIO_BUCKET_NAME, filename)
@@ -81,6 +166,8 @@ def upload_file(session: Session, file, filename: str):
         content_type=file.content_type
     )
     sync_bucket(session, None)
+    load_format_tag(session, filename)
+    load_object_tags(session, id, text_to_uuid(get_format(filename)))
 
     return {"message": "Файл загружен", "filename": filename}
 
