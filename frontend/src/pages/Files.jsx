@@ -28,6 +28,17 @@ const formatDate = (iso) => {
   });
 };
 
+const normalizeTags = (maybeTags) => {
+  if (!maybeTags) return [];
+  if (!Array.isArray(maybeTags)) return [];
+  return maybeTags
+    .map((t) => {
+      if (typeof t === "string") return t;
+      return t?.name ?? t?.tag ?? t?.value ?? "";
+    })
+    .filter(Boolean);
+};
+
 function SortSelect({ value, onChange, disabled }) {
   const [open, setOpen] = useState(false);
 
@@ -305,7 +316,6 @@ export default function Files() {
       );
 
       setAvailableTags(tags);
-
       setSelectedTags((prev) => prev.filter((t) => tags.includes(t)));
     } catch (e) {
       console.error("Ошибка загрузки тегов", e);
@@ -316,8 +326,9 @@ export default function Files() {
   }, []);
 
   const handleDownload = async (id) => {
+    const token = localStorage.getItem("token");
     try {
-      await downloadFile(id);
+      await downloadFile(id, token);
     } catch (e) {
       console.error("Ошибка скачивания", e);
       alert("Не удалось скачать файл");
@@ -441,7 +452,7 @@ export default function Files() {
             <table className="files-table">
               <thead>
                 <tr>
-                  <th>Имя файла</th>
+                  <th>Книга</th>
                   <th>Размер</th>
                   <th>Добавлен/Изменён</th>
                   <th className="th-actions">Действие</th>
@@ -449,32 +460,50 @@ export default function Files() {
               </thead>
 
               <tbody>
-                {visibleFiles.map((file) => (
-                  <tr key={file.id}>
-                    <td>
-                      <div className="file-cell">
-                        <span className="file-dot" aria-hidden="true" />
-                        <span className="file-name" title={file.object_name}>
-                          {file.object_name}
-                        </span>
-                      </div>
-                    </td>
+                {visibleFiles.map((file) => {
+                  const tags = normalizeTags(
+                    file.tags ?? file.file_tags ?? file.tag_names
+                  );
+                  return (
+                    <tr key={file.id}>
+                      <td>
+                        <div className="file-cell">
+                          <span className="file-dot" aria-hidden="true" />
+                          <div className="file-info">
+                            <span
+                              className="file-name"
+                              title={file.object_name}
+                            >
+                              {file.object_name}
+                            </span>
+                            {tags.length > 0 && (
+                              <span
+                                className="file-tags"
+                                title={tags.join(", ")}
+                              >
+                                {tags.join(", ")}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
 
-                    <td className="file-meta">{formatSize(file.size)}</td>
-                    <td className="file-meta">
-                      {formatDate(file.last_modified)}
-                    </td>
+                      <td className="file-meta">{formatSize(file.size)}</td>
+                      <td className="file-meta">
+                        {formatDate(file.last_modified)}
+                      </td>
 
-                    <td className="td-actions">
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => handleDownload(file.id)}
-                      >
-                        Скачать
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="td-actions">
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => handleDownload(file.id)}
+                        >
+                          Скачать
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

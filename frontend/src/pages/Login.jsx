@@ -15,7 +15,7 @@ export default function Login() {
     if (!identifier || !password) return alert("Заполните все поля");
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/auth/login-json", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, password }),

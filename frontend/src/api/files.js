@@ -40,6 +40,51 @@ export const getFileTags = async () => {
     .sort((a, b) => String(a).localeCompare(String(b), "ru"));
 };
 
-export const downloadFile = (id) => {
-  window.location.href = `/api/files/download/${id}`;
+const normalizeToken = (t) => {
+  if (!t) return "";
+  return t.startsWith("Bearer ") ? t.slice(7) : t;
+};
+
+const getFilenameFromContentDisposition = (cd) => {
+  if (!cd) return null;
+  const mStar = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  if (mStar) {
+    try {
+      return decodeURIComponent(mStar[1]);
+    } catch {
+      return mStar[1];
+    }
+  }
+  const m = cd.match(/filename\s*=\s*"([^"]+)"/i);
+  if (m) return m[1];
+
+  return null;
+};
+
+export const downloadFile = async (id, token) => {
+  const pure = normalizeToken(token);
+
+  const res = await fetch(`/api/files/download/${id}`, {
+    headers: { Authorization: `Bearer ${pure}` },
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Download failed: ${res.status} ${txt}`);
+  }
+
+  const cd = res.headers.get("content-disposition");
+  const filename = getFilenameFromContentDisposition(cd) || id;
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  window.URL.revokeObjectURL(url);
 };
