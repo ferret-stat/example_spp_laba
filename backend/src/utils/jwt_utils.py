@@ -1,7 +1,10 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+import uuid
 
-from jose import jwt
+from typing import Optional
+from datetime import datetime, timedelta, timezone
+from fastapi import Depends, HTTPException, Request
+
+from jose import jwt, JWTError
 from src.utils.get_env import EnvConfig
 
 ALGORITHM = "HS256"
@@ -23,3 +26,21 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         to_encode, EnvConfig.STATIC_TOKEN, algorithm=ALGORITHM)
 
     return encoded_jwt
+
+
+def get_current_user_id(request: Request) -> uuid.UUID | None:
+    auth = request.headers.get("Authorization")
+    # Анонимус, для отладки
+    # if not auth or not auth.startswith("Bearer "):
+    #     return None
+
+    token = auth.removeprefix("Bearer ").strip()
+    try:
+        payload = jwt.decode(token, EnvConfig.STATIC_TOKEN, algorithms=[ALGORITHM])
+        sub = payload.get("sub")
+        if not sub:
+            return None
+        return uuid.UUID(sub)
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+

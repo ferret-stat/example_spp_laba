@@ -1,11 +1,12 @@
 import uuid
 
 from io import BytesIO
-from minio import Minio, S3Error
+from minio import Minio
 from typing import Iterable
-from sqlalchemy import func
+from sqlalchemy import select
 from sqlalchemy.orm import Session 
 
+from src.services.loging_service import write_audit
 from src.utils.get_env import EnvConfig
 from src.utils.pg_utils import sync_bucket, load_format_tag, text_to_uuid, get_format, load_object_tags
 from src.database.models import MinioObject, MinioObjectTag, Tag
@@ -143,33 +144,86 @@ def get_tags(session):
 def get_file_url(filename: str):
     return client.presigned_get_object(EnvConfig.MINIO_BUCKET_NAME, filename)
 
+def attach_tags_to_object(session: Session, obj_id: uuid.UUID, tags: list[str]) -> list[str]:
+    tags = normalize_tags(tags)
+    if not tags:
+        return []
+    existing = session.execute(
+        select(Tag).where(Tag.name.in_(tags))
+    ).scalars().all()
+    existing_map = {t.name: t for t in existing}
 
-def upload_file(session: Session, file, filename: str):
+    missing = [name for name in tags if name not in existing_map]
+    if missing:
+        session.add_all([Tag(name=name) for name in missing])
+        session.flush()
+        new_tags = session.execute(
+            select(Tag).where(Tag.name.in_(missing))
+        ).scalars().all()
+        for t in new_tags:
+            existing_map[t.name] = t
+    for name in tags:
+        tag_id = existing_map[name].id
+        session.merge(MinioObjectTag(minio_object_id=obj_id, tag_id=tag_id))
+
+    return tags
+
+def normalize_tags(tags: list[str] | None) -> list[str]:
+    if not tags:
+        return []
+    out = []
+    seen = set()
+    for t in tags:
+        if not t:
+            continue
+        name = t.strip()
+        if not name:
+            continue
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+def upload_file(user_id, session: Session, file, filename: str, request, tags: list[str] | None = None):
     file_bytes = file.file.read()
     file_size = len(file_bytes)
     if file_size == 0:
         raise ValueError("Файл пустой или не был передан")
-    
-    id = uuid.uuid4()
+    obj_id = uuid.uuid4()
+
     obj = MinioObject(
-        id=id,
+        id=obj_id,
         bucket=EnvConfig.MINIO_BUCKET_NAME,
-        object_name=filename
+        object_name=filename,
+        user_id=user_id
     )
     session.add(obj)
+    session.flush()
+    tags_norm = attach_tags_to_object(session, obj_id, tags or [])
+    load_format_tag(session, filename)
+    load_object_tags(session, obj_id, text_to_uuid(get_format(filename)))
+    write_audit(
+        session,
+        request,
+        user_id,
+        "upload",
+        entity_id=str(obj_id),
+        meta={"content_type": file.content_type, "tags": tags_norm}
+    )
+
     session.commit()
+
     client.put_object(
         bucket_name=EnvConfig.MINIO_BUCKET_NAME,
-        object_name=str(id),
+        object_name=str(obj_id),
         data=BytesIO(file_bytes),
         length=file_size,
         content_type=file.content_type
     )
-    sync_bucket(session, None)
-    load_format_tag(session, filename)
-    load_object_tags(session, id, text_to_uuid(get_format(filename)))
 
-    return {"message": "Файл загружен", "filename": filename}
+    sync_bucket(session, None)
+
+    return {"message": "Файл загружен", "id": str(obj_id), "filename": filename, "tags": tags_norm}
 
 def delete_file(filename: str):
     client.remove_object(EnvConfig.MINIO_BUCKET_NAME, filename)

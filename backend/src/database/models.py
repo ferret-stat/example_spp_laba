@@ -1,7 +1,8 @@
 import uuid
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import declarative_base, Mapped, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import (Column, String, Boolean,
                         DateTime, UUID, Integer, 
                         BigInteger, UniqueConstraint, 
@@ -51,6 +52,18 @@ class User(Base):
         default=datetime.now
     )
 
+    audit_logs: Mapped[list["AuditLog"]] = relationship(
+        "AuditLog",
+        back_populates="user",
+        lazy="selectin",
+    )
+
+    minio_objects: Mapped[list["MinioObject"]] = relationship(
+        "MinioObject",
+        back_populates="user",
+        lazy="selectin",
+    )
+
     def __repr__(self):
         return (
             f"<User(id={self.id}, email='{self.email}', "
@@ -67,7 +80,18 @@ class MinioObject(Base):
     etag = Column(String)
     last_modified = Column(DateTime)
 
-    user_id: Mapped[uuid.UUID] = Column(UUID(as_uuid=True))
+    user_id: Mapped[uuid.UUID] = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    user: Mapped["User"] = relationship(
+        "User",
+        back_populates="minio_objects",
+        lazy="selectin",
+    )
 
     tags: Mapped[list["Tag"]] = relationship(
         "Tag",
@@ -127,6 +151,39 @@ class MinioObjectTag(Base):
     created_at = Column(DateTime(timezone=False), default=datetime.now, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("minio_object_id", "tag_id", name="uq_minio_object_tag"),
         Index("ix_minio_object_tags_tag_id", "tag_id"),
+    )
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True)
+
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    user: Mapped["User"] = relationship(
+        "User",
+        back_populates="audit_logs",
+        lazy="selectin",
+    )
+
+    action = Column(String(64), nullable=False)
+    entity = Column(String(32), nullable=False)
+    entity_id = Column(String(255), nullable=True)
+    meta = Column(JSONB, nullable=True)
+
+    ip = Column(String(64), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
     )
