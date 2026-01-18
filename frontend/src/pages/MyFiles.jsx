@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { getFiles } from "../api/files";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getMyFiles } from "../api/files";
 import api from "../api/api";
 import "./files.css";
 
@@ -231,22 +231,24 @@ function TagsMultiSelect({
   );
 }
 
-export default function Files() {
+export default function MyFiles() {
   const [files, setFiles] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
   const [sortBy, setSortBy] = useState("last_modified");
   const [sortDir, setSortDir] = useState("desc");
 
   const [selectedTags, setSelectedTags] = useState([]);
-
   const [availableTags, setAvailableTags] = useState([]);
   const [tagsLoading, setTagsLoading] = useState(false);
+
+  const fileInputRef = useRef(null);
 
   const limit = 10;
 
@@ -254,10 +256,11 @@ export default function Files() {
   const canNext = page < totalPages && !loading;
 
   const pageTitle = useMemo(() => {
+    if (uploading) return "Загрузка файла…";
     if (loading) return "Загрузка…";
     if (error) return "Ошибка";
-    return "Библиотека";
-  }, [loading, error]);
+    return "Мои файлы";
+  }, [loading, uploading, error]);
 
   const removeTag = (tag) => {
     setSelectedTags((prev) => prev.filter((t) => t !== tag));
@@ -269,7 +272,7 @@ export default function Files() {
         setError("");
         setLoading(true);
 
-        const data = await getFiles(pageNumber, limit, {
+        const data = await getMyFiles(pageNumber, limit, {
           sortBy,
           sortDir,
           tags: selectedTags,
@@ -325,39 +328,53 @@ export default function Files() {
     }
   }, []);
 
-  const handleDownload = async (file) => {
-    try {
-      const token = localStorage.getItem("token");
-
-      const res = await api.get(`/files/download/${file.id}`, {
-        responseType: "blob",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const cd = res.headers?.["content-disposition"] || "";
-      const match = cd.match(/filename\*?=(?:UTF-8''|")?([^";\n]+)"?/i);
-      const filename = match
-        ? decodeURIComponent(match[1])
-        : file.object_name || "file";
-
-      const url = window.URL.createObjectURL(res.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error("Ошибка скачивания", e);
-      alert("Не удалось скачать файл");
-    }
-  };
-
   const toggleSortDir = () => {
     setSortDir((prev) => (prev === "desc" ? "asc" : "desc"));
+  };
+
+  const onClickUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const uploadFile = async (file) => {
+    const token = localStorage.getItem("token");
+
+    const qs = new URLSearchParams();
+    if (Array.isArray(selectedTags) && selectedTags.length > 0) {
+      selectedTags.forEach((t) => t && qs.append("tags", t));
+    }
+
+    const form = new FormData();
+    form.append("file", file, file.name);
+
+    const url = qs.toString()
+      ? `/files/upload?${qs.toString()}`
+      : `/files/upload`;
+
+    await api.post(url, form, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": undefined,
+      },
+    });
+  };
+
+  const handlePickFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    try {
+      setError("");
+      setUploading(true);
+      await uploadFile(file);
+      await loadFiles(1);
+    } catch (err) {
+      console.error("Ошибка загрузки файла", err);
+      setError("Не удалось загрузить файл. Попробуйте ещё раз.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const visibleFiles = useMemo(() => files.slice(0, limit), [files, limit]);
@@ -372,24 +389,33 @@ export default function Files() {
           <div>
             <h2 className="files-title">{pageTitle}</h2>
             <p className="files-subtitle">
-              Скачивайте файлы в один клик из нашей библиотеки!
+              Загружайте и управляйте своими файлами
             </p>
           </div>
 
           <div className="files-actions">
+            <button
+              className="btn btn-primary"
+              onClick={onClickUpload}
+              disabled={loading || uploading}
+              title="Загрузить файл"
+            >
+              Добавить файл
+            </button>
+
             <div className="sort-control">
               <span className="sort-label">Сортировать по: </span>
               <SortSelect
                 value={sortBy}
                 onChange={setSortBy}
-                disabled={loading}
+                disabled={loading || uploading}
               />
             </div>
 
             <button
               className="btn btn-ghost"
               onClick={toggleSortDir}
-              disabled={loading}
+              disabled={loading || uploading}
               title="Направление сортировки"
             >
               {sortDir === "desc" ? "По убыванию" : "По возрастанию"}
@@ -398,11 +424,18 @@ export default function Files() {
             <button
               className="btn btn-ghost"
               onClick={() => loadFiles(page)}
-              disabled={loading}
+              disabled={loading || uploading}
               title="Обновить"
             >
               Обновить
             </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              onChange={handlePickFile}
+              style={{ display: "none" }}
+            />
           </div>
         </div>
 
@@ -414,7 +447,7 @@ export default function Files() {
               options={availableTags}
               value={selectedTags}
               onChange={setSelectedTags}
-              disabled={loading || tagsLoading}
+              disabled={loading || uploading || tagsLoading}
               placeholder={tagsLoading ? "Загрузка…" : "Выберите теги"}
               onOpen={loadTags}
             />
@@ -427,7 +460,7 @@ export default function Files() {
                     type="button"
                     className="tag-pill-x"
                     onClick={() => removeTag(tag)}
-                    disabled={loading}
+                    disabled={loading || uploading}
                     aria-label={`Убрать тег ${tag}`}
                     title="Убрать"
                   >
@@ -446,7 +479,7 @@ export default function Files() {
             <button
               className="btn"
               onClick={() => loadFiles(page)}
-              disabled={loading}
+              disabled={loading || uploading}
             >
               Повторить
             </button>
@@ -465,7 +498,7 @@ export default function Files() {
           <div className="state">
             <div className="state-title">Файлов пока нет</div>
             <div className="state-text">
-              Здесь появятся ваши загруженные файлы.
+              Нажмите «Добавить файл», чтобы загрузить первый.
             </div>
           </div>
         ) : (
@@ -473,7 +506,7 @@ export default function Files() {
             <table className="files-table">
               <thead>
                 <tr>
-                  <th>Книга</th>
+                  <th>Файл</th>
                   <th>Размер</th>
                   <th>Добавлен/Изменён</th>
                   <th className="th-actions">Действие</th>
@@ -485,17 +518,18 @@ export default function Files() {
                   const tags = normalizeTags(
                     file.tags ?? file.file_tags ?? file.tag_names
                   );
+                  const nameNoExt = String(file.object_name || "").replace(
+                    /\.[^/.]+$/,
+                    ""
+                  );
                   return (
                     <tr key={file.id}>
                       <td>
                         <div className="file-cell">
                           <span className="file-dot" aria-hidden="true" />
                           <div className="file-info">
-                            <span
-                              className="file-name"
-                              title={file.object_name.replace(/\.[^/.]+$/, "")}
-                            >
-                              {file.object_name.replace(/\.[^/.]+$/, "")}
+                            <span className="file-name" title={nameNoExt}>
+                              {nameNoExt}
                             </span>
 
                             {tags.length > 0 && (
@@ -524,9 +558,11 @@ export default function Files() {
                       <td className="td-actions">
                         <button
                           className="btn btn-primary"
-                          onClick={() => handleDownload(file)}
+                          onClick={() => {}}
+                          disabled={loading || uploading}
+                          title="Редактировать (в разработке)"
                         >
-                          Скачать
+                          Редактировать
                         </button>
                       </td>
                     </tr>
@@ -541,7 +577,7 @@ export default function Files() {
           <div className="pagination">
             <button
               className="btn btn-ghost"
-              disabled={!canPrev}
+              disabled={!canPrev || uploading}
               onClick={() => loadFiles(page - 1)}
             >
               Назад
@@ -555,7 +591,7 @@ export default function Files() {
 
             <button
               className="btn btn-ghost"
-              disabled={!canNext}
+              disabled={!canNext || uploading}
               onClick={() => loadFiles(page + 1)}
             >
               Вперёд

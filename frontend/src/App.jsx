@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Files from "./pages/Files";
+import MyFiles from "./pages/MyFiles";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./components/Navbar";
 
@@ -23,6 +24,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Files />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/myfiles"
+            element={
+              <ProtectedRoute>
+                <MyFiles />
               </ProtectedRoute>
             }
           />

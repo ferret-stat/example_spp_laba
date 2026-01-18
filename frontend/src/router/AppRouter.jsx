@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Login from "../pages/Login";
 import Files from "../pages/Files";
+import MyFiles from "../pages/MyFiles";
 
 const ProtectedRoute = ({ children }) => {
   const token = localStorage.getItem("token");
@@ -16,6 +17,14 @@ export default function AppRouter() {
         element={
           <ProtectedRoute>
             <Files />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/myfiles"
+        element={
+          <ProtectedRoute>
+            <MyFiles />
           </ProtectedRoute>
         }
       />

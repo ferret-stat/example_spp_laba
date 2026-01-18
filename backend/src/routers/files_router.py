@@ -7,9 +7,15 @@ from fastapi import (APIRouter, UploadFile, File, Depends,
 from fastapi.responses import StreamingResponse
 
 from src.database.get_db import get_db
-from src.auth.dependencies import get_current_user_id
+from src.database.models import User
+from src.auth.dependencies import get_current_user_id, get_current_user
 from src.services.loging_service import write_audit
-from src.services.minio_service import list_files, download_file, upload_file, delete_file, get_tags
+from src.services.minio_service import (list_files, 
+                                        download_file, 
+                                        upload_file, 
+                                        delete_file, 
+                                        get_tags, 
+                                        user_files)
 
 router = APIRouter(
     prefix="/files",
@@ -39,6 +45,23 @@ async def list_all(request: Request,
                 meta={"page": page, "page_size": page_size, "sort_by": sort_by,
                       "sort_dir": sort_dir, "tags": tags})
     return list_files(db, page, page_size, sort_by, sort_dir, tags)
+
+
+@router.get("/my_books")
+async def my_books(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    page: int = 1,
+    page_size: int = 10,
+    sort_by: str = "last_modified",
+    sort_dir: str = "desc",
+    tags: list[str] = Query(default=[]),
+):
+    write_audit(db, request, current_user.id, "my_books",
+            meta={"page": page, "page_size": page_size, "sort_by": sort_by,
+                    "sort_dir": sort_dir, "tags": tags})
+    return user_files(db, current_user, page, page_size, sort_by, sort_dir, tags)
 
 
 @router.get("/download/{filename}")

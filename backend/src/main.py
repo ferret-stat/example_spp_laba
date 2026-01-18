@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.routers.create_user import router as create_user
 from src.routers.authorization import router as auth_router
 from src.routers.files_router import router as files_router
+from src.routers.description import router as desc_router
+from src.routers.comments import router as comments_router
+from src.routers.file_like import router as like_router
 
 
 app = FastAPI()
@@ -23,3 +26,6 @@ app.add_middleware(
 app.include_router(create_user, prefix='/auth')
 app.include_router(auth_router)
 app.include_router(files_router)
+app.include_router(desc_router)
+app.include_router(comments_router)
+app.include_router(like_router)

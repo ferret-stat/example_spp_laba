@@ -8,8 +8,15 @@ from sqlalchemy.orm import Session
 
 from src.services.loging_service import write_audit
 from src.utils.get_env import EnvConfig
-from src.utils.pg_utils import sync_bucket, load_format_tag, text_to_uuid, get_format, load_object_tags
-from src.database.models import MinioObject, MinioObjectTag, Tag
+from src.utils.pg_utils import (sync_bucket, 
+                                load_format_tag, 
+                                text_to_uuid, 
+                                get_format, 
+                                load_object_tags)
+from src.database.models import (MinioObject, 
+                                 MinioObjectTag, 
+                                 Tag, 
+                                 User)
 
 client = Minio(
     EnvConfig.MINIO_ENDPOINT,
@@ -81,7 +88,19 @@ def list_files(
         .filter(MinioObject.id.in_(ids))
         .all()
     )
-    names_map = {str(o.id): o.object_name for o in db_objects}
+    obj_map = {str(o.id): o for o in db_objects}
+    user_ids = {o.user_id for o in db_objects if o.user_id}
+    users_map: dict[uuid.UUID, str] = {}
+    if user_ids:
+        users = (
+            session.query(User.id, User.email, User.phone)
+            .filter(User.id.in_(user_ids))
+            .all()
+        )
+
+        for uid, email, phone in users:
+            users_map[uid] = email or phone
+    
 
     tag_rows = (
         session.query(MinioObjectTag.minio_object_id, Tag.name)
@@ -95,8 +114,15 @@ def list_files(
         tags_map.setdefault(str(obj_id), []).append(tag_name)
 
     for f in files:
-        f["object_name"] = names_map.get(f["id"])
+        o = obj_map.get(f["id"])
+
+        f["object_name"] = o.object_name if o else None
         f["tags"] = tags_map.get(f["id"], [])
+
+        if o and o.user_id:
+            f["author"] = users_map.get(o.user_id)
+        else:
+            f["author"] = None
 
     # Сортировка
     allowed = {"size", "object_name", "last_modified"}
@@ -124,6 +150,94 @@ def list_files(
         "pages": (total + page_size - 1) // page_size,
         "sort": {"by": sort_by, "dir": "desc" if reverse else "asc"},
     }
+
+def user_files(
+    session: Session,
+    current_user: User,                
+    page: int = 1,
+    page_size: int = 10,
+    sort_by: str = "last_modified",
+    sort_dir: str = "desc",
+    tags: Iterable[str] | None = None,
+):
+    tags = normalize_tags(tags)
+    q = session.query(MinioObject)
+    if not current_user.is_superuser:
+        q = q.filter(MinioObject.user_id == current_user.id)
+    if tags:
+        q = (
+            q.join(MinioObjectTag, MinioObjectTag.minio_object_id == MinioObject.id)
+             .join(Tag, Tag.id == MinioObjectTag.tag_id)
+             .filter(Tag.name.in_(tags))
+             .distinct()
+        )
+    db_objects = q.all()
+
+    if not db_objects:
+        return {"files": [], "total": 0, "page": page, "pages": 0}
+
+    obj_map = {str(o.id): o for o in db_objects}
+    ids = [o.id for o in db_objects]
+    user_ids = {o.user_id for o in db_objects if o.user_id}
+    users_map: dict[uuid.UUID, str] = {}
+    if user_ids:
+        users = (
+            session.query(User.id, User.email, User.phone)
+            .filter(User.id.in_(user_ids))
+            .all()
+        )
+        for uid, email, phone in users:
+            users_map[uid] = email or phone
+    tag_rows = (
+        session.query(MinioObjectTag.minio_object_id, Tag.name)
+        .join(Tag, Tag.id == MinioObjectTag.tag_id)
+        .filter(MinioObjectTag.minio_object_id.in_(ids))
+        .all()
+    )
+    tags_map: dict[str, list[str]] = {}
+    for obj_id, tag_name in tag_rows:
+        tags_map.setdefault(str(obj_id), []).append(tag_name)
+    minio_meta: dict[str, dict] = {}
+    for obj in client.list_objects(EnvConfig.MINIO_BUCKET_NAME, recursive=True):
+        try:
+            obj_id = str(uuid.UUID(obj.object_name))
+        except Exception:
+            continue
+        if obj_id in obj_map:
+            minio_meta[obj_id] = {"size": obj.size, "last_modified": obj.last_modified}
+    files = []
+    for oid_str, o in obj_map.items():
+        m = minio_meta.get(oid_str, {})
+        files.append({
+            "id": oid_str,
+            "object_name": o.object_name,
+            "size": m.get("size"),
+            "last_modified": m.get("last_modified"),
+            "tags": tags_map.get(oid_str, []),
+            "author": users_map.get(o.user_id) if o.user_id else None,
+        })
+    allowed = {"size", "object_name", "last_modified", "author"}
+    if sort_by not in allowed:
+        sort_by = "last_modified"
+
+    reverse = (sort_dir.lower() == "desc")
+    def sort_key(item):
+        v = item.get(sort_by)
+        if sort_by in ("object_name", "author"):
+            return (v is None, (v or "").lower())
+        return (v is None, v)
+    files.sort(key=sort_key, reverse=reverse)
+    total = len(files)
+    start = max(0, (page - 1) * page_size)
+    end = start + page_size
+    return {
+        "files": files[start:end],
+        "total": total,
+        "page": page,
+        "pages": (total + page_size - 1) // page_size,
+        "sort": {"by": sort_by, "dir": "desc" if reverse else "asc"},
+    }
+
 
 def get_tags(session):
     tags = (
@@ -176,7 +290,7 @@ def normalize_tags(tags: list[str] | None) -> list[str]:
     for t in tags:
         if not t:
             continue
-        name = t.strip()
+        name = t.strip().lower()
         if not name:
             continue
         if name not in seen:

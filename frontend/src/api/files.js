@@ -27,6 +27,33 @@ export const getFiles = async (
   return res.data;
 };
 
+export const getMyFiles = async (
+  page = 1,
+  limit = 10,
+  { sortBy = "last_modified", sortDir = "desc", tags = [] } = {}
+) => {
+  const params = new URLSearchParams();
+
+  params.set("page", String(page));
+  params.set("page_size", String(limit));
+
+  if (sortBy) params.set("sort_by", sortBy);
+  if (sortDir) params.set("sort_dir", sortDir);
+  if (Array.isArray(tags) && tags.length > 0) {
+    tags.forEach((t) => {
+      if (t) params.append("tags", t);
+    });
+  }
+
+  const res = await api.get(`/files/my_books?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+
+  return res.data;
+};
+
 export const getFileTags = async () => {
   const res = await api.get("/files/tags", {
     headers: {
