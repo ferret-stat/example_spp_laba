@@ -38,6 +38,9 @@ class FilePageUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=20000)
     meta: Optional[dict] = None
 
+class TagsUpdate(BaseModel):
+    tags: list[str] = Field(default_factory=list)
+
 class CommentOut(BaseModel):
     id: str
     file_id: str
@@ -62,3 +65,7 @@ class LikeIn(BaseModel):
 
 class LikeOut(BaseModel):
     my_like: Optional[bool] = None
+
+
+class UserActiveUpdate(BaseModel):
+    is_active: bool = True

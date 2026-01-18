@@ -1,9 +1,9 @@
-import uuid
+﻿import uuid
 
 from io import BytesIO
 from minio import Minio
 from typing import Iterable
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session 
 
 from src.services.loging_service import write_audit
@@ -13,10 +13,12 @@ from src.utils.pg_utils import (sync_bucket,
                                 text_to_uuid, 
                                 get_format, 
                                 load_object_tags)
-from src.database.models import (MinioObject, 
-                                 MinioObjectTag, 
-                                 Tag, 
-                                 User)
+from src.database.models import (MinioObject,
+                                 MinioObjectTag,
+                                 Tag,
+                                 User,
+                                 FileLike,
+                                 FileComment)
 
 client = Minio(
     EnvConfig.MINIO_ENDPOINT,
@@ -113,11 +115,32 @@ def list_files(
     for obj_id, tag_name in tag_rows:
         tags_map.setdefault(str(obj_id), []).append(tag_name)
 
+    comment_rows = (
+        session.query(FileComment.minio_object_id, func.count(FileComment.id))
+        .filter(
+            FileComment.minio_object_id.in_(ids),
+            FileComment.is_deleted.is_(False),
+        )
+        .group_by(FileComment.minio_object_id)
+        .all()
+    )
+    comments_map = {str(obj_id): int(count) for obj_id, count in comment_rows}
+
+    like_rows = (
+        session.query(FileLike.minio_object_id, func.count(FileLike.id))
+        .filter(FileLike.is_like.is_(True), FileLike.minio_object_id.in_(ids))
+        .group_by(FileLike.minio_object_id)
+        .all()
+    )
+    likes_map = {str(obj_id): int(count) for obj_id, count in like_rows}
+
     for f in files:
         o = obj_map.get(f["id"])
 
         f["object_name"] = o.object_name if o else None
         f["tags"] = tags_map.get(f["id"], [])
+        f["likes_count"] = likes_map.get(f["id"], 0)
+        f["comments_count"] = comments_map.get(f["id"], 0)
 
         if o and o.user_id:
             f["author"] = users_map.get(o.user_id)
@@ -125,7 +148,7 @@ def list_files(
             f["author"] = None
 
     # Сортировка
-    allowed = {"size", "object_name", "last_modified"}
+    allowed = {"size", "object_name", "last_modified", "likes_count"}
     if sort_by not in allowed:
         sort_by = "last_modified"
 
@@ -135,6 +158,8 @@ def list_files(
         v = item.get(sort_by)
         if sort_by == "object_name":
             return (v is None, (v or "").lower())
+        if sort_by == "likes_count":
+            return (v is None, int(v or 0))
         return (v is None, v)
 
     files.sort(key=sort_key, reverse=reverse)
@@ -197,6 +222,23 @@ def user_files(
     tags_map: dict[str, list[str]] = {}
     for obj_id, tag_name in tag_rows:
         tags_map.setdefault(str(obj_id), []).append(tag_name)
+    comment_rows = (
+        session.query(FileComment.minio_object_id, func.count(FileComment.id))
+        .filter(
+            FileComment.minio_object_id.in_(ids),
+            FileComment.is_deleted.is_(False),
+        )
+        .group_by(FileComment.minio_object_id)
+        .all()
+    )
+    comments_map = {str(obj_id): int(count) for obj_id, count in comment_rows}
+    like_rows = (
+        session.query(FileLike.minio_object_id, func.count(FileLike.id))
+        .filter(FileLike.is_like.is_(True), FileLike.minio_object_id.in_(ids))
+        .group_by(FileLike.minio_object_id)
+        .all()
+    )
+    likes_map = {str(obj_id): int(count) for obj_id, count in like_rows}
     minio_meta: dict[str, dict] = {}
     for obj in client.list_objects(EnvConfig.MINIO_BUCKET_NAME, recursive=True):
         try:
@@ -214,9 +256,11 @@ def user_files(
             "size": m.get("size"),
             "last_modified": m.get("last_modified"),
             "tags": tags_map.get(oid_str, []),
+            "likes_count": likes_map.get(oid_str, 0),
+            "comments_count": comments_map.get(oid_str, 0),
             "author": users_map.get(o.user_id) if o.user_id else None,
         })
-    allowed = {"size", "object_name", "last_modified", "author"}
+    allowed = {"size", "object_name", "last_modified", "author", "likes_count"}
     if sort_by not in allowed:
         sort_by = "last_modified"
 
@@ -225,6 +269,8 @@ def user_files(
         v = item.get(sort_by)
         if sort_by in ("object_name", "author"):
             return (v is None, (v or "").lower())
+        if sort_by == "likes_count":
+            return (v is None, int(v or 0))
         return (v is None, v)
     files.sort(key=sort_key, reverse=reverse)
     total = len(files)
@@ -254,6 +300,21 @@ def get_tags(session):
         }
         for tag in tags
     ]
+
+
+def delete_file_by_id(session: Session, file_id: uuid.UUID):
+    obj = (
+        session.query(MinioObject)
+        .filter(MinioObject.id == file_id)
+        .one_or_none()
+    )
+    if not obj:
+        return None
+
+    client.remove_object(EnvConfig.MINIO_BUCKET_NAME, str(file_id))
+    session.delete(obj)
+    session.commit()
+    return obj
 
 def get_file_url(filename: str):
     return client.presigned_get_object(EnvConfig.MINIO_BUCKET_NAME, filename)

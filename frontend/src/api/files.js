@@ -67,6 +67,177 @@ export const getFileTags = async () => {
     .sort((a, b) => String(a).localeCompare(String(b), "ru"));
 };
 
+export const deleteFile = async (fileId) => {
+  const res = await api.delete(`/files/${fileId}`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const getAdminMe = async () => {
+  const res = await api.get("/admin/me", {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const getUserStats = async () => {
+  const res = await api.get("/admin/users/stats", {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const getAdminUsers = async (days = 7) => {
+  const res = await api.get("/admin/users", {
+    params: { days },
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const setUserActive = async (userId, isActive) => {
+  const res = await api.patch(
+    `/admin/users/${userId}/active`,
+    { is_active: isActive },
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    }
+  );
+  return res.data;
+};
+
+export const getFileDescription = async (fileId) => {
+  const res = await api.get(`/files/${fileId}/description`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const createFileDescription = async (fileId, payload) => {
+  const res = await api.post(`/files/${fileId}/description`, payload, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const updateFileDescription = async (fileId, payload) => {
+  const res = await api.patch(`/files/${fileId}/description`, payload, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const updateFileTags = async (fileId, tags) => {
+  const res = await api.put(
+    `/files/${fileId}/tags`,
+    { tags },
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    }
+  );
+  return res.data;
+};
+
+export const getFileLike = async (fileId) => {
+  const res = await api.get(`/files/${fileId}/like`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const toggleFileLike = async (fileId, isLike = true) => {
+  const res = await api.post(
+    `/files/${fileId}/like`,
+    { is_like: isLike },
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    }
+  );
+  return res.data;
+};
+
+export const listFileComments = async (fileId, { limit = 50, offset = 0 } = {}) => {
+  const res = await api.get(`/files/${fileId}/comments`, {
+    params: { limit, offset },
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const createFileComment = async (fileId, payload) => {
+  const res = await api.post(`/files/${fileId}/comments`, payload, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const updateFileComment = async (commentId, payload) => {
+  const res = await api.patch(`/comments/${commentId}`, payload, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const deleteFileComment = async (commentId) => {
+  const res = await api.delete(`/comments/${commentId}`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const getCommentLike = async (commentId) => {
+  const res = await api.get(`/comments/${commentId}/like`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  return res.data;
+};
+
+export const toggleCommentLike = async (commentId, isLike = true) => {
+  const res = await api.post(
+    `/comments/${commentId}/like`,
+    { is_like: isLike },
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    }
+  );
+  return res.data;
+};
+
 const normalizeToken = (t) => {
   if (!t) return "";
   return t.startsWith("Bearer ") ? t.slice(7) : t;

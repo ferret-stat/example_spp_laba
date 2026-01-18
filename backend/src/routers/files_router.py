@@ -1,4 +1,5 @@
 from urllib.parse import quote
+import uuid
 from minio.error import S3Error
 from sqlalchemy.orm import Session
 
@@ -7,14 +8,21 @@ from fastapi import (APIRouter, UploadFile, File, Depends,
 from fastapi.responses import StreamingResponse
 
 from src.database.get_db import get_db
-from src.database.models import User
+from src.database.models import User, MinioObjectTag
 from src.auth.dependencies import get_current_user_id, get_current_user
+from src.database.schemas import TagsUpdate
+from src.services.description_service import (
+    get_minio_object_or_404,
+    ensure_owner_or_superuser,
+)
 from src.services.loging_service import write_audit
-from src.services.minio_service import (list_files, 
-                                        download_file, 
-                                        upload_file, 
-                                        delete_file, 
-                                        get_tags, 
+from src.services.minio_service import (list_files,
+                                        download_file,
+                                        upload_file,
+                                        delete_file,
+                                        delete_file_by_id,
+                                        get_tags,
+                                        attach_tags_to_object,
                                         user_files)
 
 router = APIRouter(
@@ -89,10 +97,67 @@ def list_tags(
     db: Session = Depends(get_db),
 ):
     return get_tags(db)
+
+
+@router.put("/{file_id}/tags")
+async def update_tags(
+    request: Request,
+    file_id: uuid.UUID,
+    payload: TagsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    obj = get_minio_object_or_404(db, file_id)
+    ensure_owner_or_superuser(current_user, obj)
+
+    db.query(MinioObjectTag).filter(
+        MinioObjectTag.minio_object_id == file_id
+    ).delete(synchronize_session=False)
+    tags_norm = attach_tags_to_object(db, file_id, payload.tags)
+    db.commit()
+
+    write_audit(
+        db,
+        request,
+        current_user.id,
+        "update_tags",
+        entity="minio_object",
+        entity_id=str(file_id),
+        meta={"tags": tags_norm},
+    )
+
+    return {"file_id": str(file_id), "tags": tags_norm}
     
 
 
 @router.delete("/delete/{filename}")
 async def delete(filename: str):
     return delete_file(filename)
+
+
+@router.delete("/{file_id}")
+async def delete_by_id(
+    request: Request,
+    file_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    obj = get_minio_object_or_404(db, file_id)
+    ensure_owner_or_superuser(current_user, obj)
+    try:
+        deleted = delete_file_by_id(db, file_id)
+    except S3Error:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+
+    write_audit(
+        db,
+        request,
+        current_user.id,
+        "delete_file",
+        entity="minio_object",
+        entity_id=str(file_id),
+        meta={"filename": deleted.object_name if deleted else None},
+    )
+
+    return {"message": "Файл удалён", "id": str(file_id)}
 

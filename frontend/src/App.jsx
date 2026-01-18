@@ -1,14 +1,14 @@
-import { Routes, Route } from "react-router-dom";
+﻿import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Files from "./pages/Files";
 import MyFiles from "./pages/MyFiles";
+import FileView from "./pages/FileView";
+import FileEdit from "./pages/FileEdit";
+import Home from "./pages/Home";
+import Dashboard from "./pages/Dashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Navbar from "./components/Navbar";
-
-function Home() {
-  return <h1>Добро пожаловать на домашнюю страницу</h1>;
-}
 
 function App() {
   return (
@@ -35,6 +35,30 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/files/:fileId"
+            element={
+              <ProtectedRoute>
+                <FileView />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/files/:fileId/edit"
+            element={
+              <ProtectedRoute>
+                <FileEdit />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </main>
     </>
@@ -42,3 +66,6 @@ function App() {
 }
 
 export default App;
+
+
+

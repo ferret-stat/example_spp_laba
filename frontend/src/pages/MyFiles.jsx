@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getMyFiles } from "../api/files";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { deleteFile, getMyFiles } from "../api/files";
 import api from "../api/api";
 import "./files.css";
 
@@ -43,9 +44,10 @@ function SortSelect({ value, onChange, disabled }) {
   const [open, setOpen] = useState(false);
 
   const options = [
-    { value: "last_modified", label: "Дате" },
-    { value: "object_name", label: "Имени" },
-    { value: "size", label: "Размеру" },
+    { value: "last_modified", label: "По дате" },
+    { value: "object_name", label: "По названию" },
+    { value: "size", label: "По размеру" },
+    { value: "likes_count", label: "По лайкам" },
   ];
 
   const current = options.find((o) => o.value === value) ?? options[0];
@@ -232,6 +234,7 @@ function TagsMultiSelect({
 }
 
 export default function MyFiles() {
+  const navigate = useNavigate();
   const [files, setFiles] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -239,6 +242,7 @@ export default function MyFiles() {
 
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
 
   const [sortBy, setSortBy] = useState("last_modified");
@@ -377,6 +381,25 @@ export default function MyFiles() {
     }
   };
 
+  const handleDelete = async (file) => {
+    if (!file?.id) return;
+    const ok = window.confirm(
+      `Удалить файл "${file.object_name || file.id}"?`
+    );
+    if (!ok) return;
+    try {
+      setDeletingId(file.id);
+      setError("");
+      await deleteFile(file.id);
+      await loadFiles(1);
+    } catch (err) {
+      console.error("Ошибка удаления файла", err);
+      setError("Не удалось удалить файл.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const visibleFiles = useMemo(() => files.slice(0, limit), [files, limit]);
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to =
@@ -509,6 +532,8 @@ export default function MyFiles() {
                   <th>Файл</th>
                   <th>Размер</th>
                   <th>Добавлен/Изменён</th>
+                  <th>Лайки</th>
+                  <th>Комментарии</th>
                   <th className="th-actions">Действие</th>
                 </tr>
               </thead>
@@ -554,16 +579,41 @@ export default function MyFiles() {
                       <td className="file-meta">
                         {formatDate(file.last_modified)}
                       </td>
+                      <td className="file-meta">{file.likes_count ?? 0}</td>
+                      <td className="file-meta">{file.comments_count ?? 0}</td>
 
                       <td className="td-actions">
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => {}}
-                          disabled={loading || uploading}
-                          title="Редактировать (в разработке)"
-                        >
-                          Редактировать
-                        </button>
+                        <div className="action-group">
+                          <button
+                            className="btn btn-ghost"
+                            onClick={() =>
+                              navigate(`/files/${file.id}`, {
+                                state: { file, isOwner: true },
+                              })
+                            }
+                            disabled={loading || uploading}
+                          >
+                            Просмотр
+                          </button>
+                          <button
+                            className="btn btn-primary"
+                            onClick={() =>
+                              navigate(`/files/${file.id}/edit`, {
+                                state: { file, isOwner: true },
+                              })
+                            }
+                            disabled={loading || uploading || deletingId === file.id}
+                          >
+                            Редактировать
+                          </button>
+                          <button
+                            className="btn btn-ghost"
+                            onClick={() => handleDelete(file)}
+                            disabled={loading || uploading || deletingId === file.id}
+                          >
+                            Удалить
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -606,3 +656,6 @@ export default function MyFiles() {
     </div>
   );
 }
+
+
+

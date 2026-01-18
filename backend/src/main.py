@@ -6,6 +6,7 @@ from src.routers.files_router import router as files_router
 from src.routers.description import router as desc_router
 from src.routers.comments import router as comments_router
 from src.routers.file_like import router as like_router
+from src.routers.admin import router as admin_router
 
 
 app = FastAPI()
@@ -29,3 +30,4 @@ app.include_router(files_router)
 app.include_router(desc_router)
 app.include_router(comments_router)
 app.include_router(like_router)
+app.include_router(admin_router)

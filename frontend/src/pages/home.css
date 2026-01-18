@@ -1,0 +1,86 @@
+:root {
+  --home-bg: #f7f3ef;
+  --home-ink: #1b1a18;
+  --home-muted: rgba(27, 26, 24, 0.65);
+  --home-card: #ffffff;
+  --home-accent: #d65f2a;
+  --home-border: rgba(27, 26, 24, 0.12);
+  --home-shadow: 0 20px 50px rgba(0, 0, 0, 0.12);
+}
+
+.home-page {
+  min-height: 100vh;
+  padding: 60px 16px;
+  background:
+    radial-gradient(900px 500px at 15% 10%, rgba(214, 95, 42, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 85% 30%, rgba(46, 125, 106, 0.18), transparent 60%),
+    var(--home-bg);
+  color: var(--home-ink);
+  font-family: "Georgia", "Times New Roman", serif;
+}
+
+.home-hero {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 30px;
+  align-items: center;
+}
+
+.home-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.home-kicker {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 12px;
+  color: var(--home-accent);
+  font-weight: 700;
+}
+
+.home-title {
+  font-size: clamp(32px, 4vw, 46px);
+  margin: 0;
+}
+
+.home-text {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--home-muted);
+  margin: 0;
+}
+
+.home-actions {
+  display: flex;
+  align-items: center;
+}
+
+.home-note {
+  font-size: 14px;
+  color: var(--home-muted);
+}
+
+.home-card {
+  background: var(--home-card);
+  border: 1px solid var(--home-border);
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: var(--home-shadow);
+}
+
+.home-card-title {
+  font-size: 18px;
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.home-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--home-muted);
+  line-height: 1.7;
+}

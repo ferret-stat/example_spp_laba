@@ -1,0 +1,96 @@
+:root {
+  --nav-bg: #0f172a;
+  --nav-accent: #f97316;
+  --nav-text: rgba(255, 255, 255, 0.92);
+  --nav-muted: rgba(255, 255, 255, 0.65);
+  --nav-border: rgba(255, 255, 255, 0.12);
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background:
+    linear-gradient(90deg, rgba(249, 115, 22, 0.08), transparent 40%),
+    var(--nav-bg);
+  border-bottom: 1px solid var(--nav-border);
+  color: var(--nav-text);
+}
+
+.navbar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  gap: 16px;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--nav-text);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--nav-accent);
+  box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.2);
+}
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.nav-link {
+  color: var(--nav-muted);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: 10px;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.nav-link:hover {
+  color: var(--nav-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-button {
+  border: 1px solid var(--nav-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--nav-text);
+  padding: 8px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nav-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (max-width: 680px) {
+  .navbar-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

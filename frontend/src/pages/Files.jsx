@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getFiles } from "../api/files";
 import api from "../api/api";
 import "./files.css";
@@ -43,9 +44,10 @@ function SortSelect({ value, onChange, disabled }) {
   const [open, setOpen] = useState(false);
 
   const options = [
-    { value: "last_modified", label: "Дате" },
-    { value: "object_name", label: "Имени" },
-    { value: "size", label: "Размеру" },
+    { value: "last_modified", label: "По дате" },
+    { value: "object_name", label: "По названию" },
+    { value: "size", label: "По размеру" },
+    { value: "likes_count", label: "По лайкам" },
   ];
 
   const current = options.find((o) => o.value === value) ?? options[0];
@@ -232,6 +234,7 @@ function TagsMultiSelect({
 }
 
 export default function Files() {
+  const navigate = useNavigate();
   const [files, setFiles] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -476,6 +479,8 @@ export default function Files() {
                   <th>Книга</th>
                   <th>Размер</th>
                   <th>Добавлен/Изменён</th>
+                  <th>Лайки</th>
+                  <th>Комментарии</th>
                   <th className="th-actions">Действие</th>
                 </tr>
               </thead>
@@ -520,14 +525,28 @@ export default function Files() {
                       <td className="file-meta">
                         {formatDate(file.last_modified)}
                       </td>
+                      <td className="file-meta">{file.likes_count ?? 0}</td>
+                      <td className="file-meta">{file.comments_count ?? 0}</td>
 
                       <td className="td-actions">
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => handleDownload(file)}
-                        >
-                          Скачать
-                        </button>
+                        <div className="action-group">
+                          <button
+                            className="btn btn-ghost"
+                            onClick={() =>
+                              navigate(`/files/${file.id}`, {
+                                state: { file, isOwner: false },
+                              })
+                            }
+                          >
+                            Просмотр
+                          </button>
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => handleDownload(file)}
+                          >
+                            Скачать
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -570,3 +589,6 @@ export default function Files() {
     </div>
   );
 }
+
+
+

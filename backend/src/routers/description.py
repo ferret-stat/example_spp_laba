@@ -54,14 +54,14 @@ def create_file_page(
     db.commit()
     db.refresh(page)
     write_audit(
-            db,
-            request,
-            current_user.id,
-            action="file_like_set",
-            entity="file_like",
-            entity_id=str(file_id),
-            meta={"is_like": payload.is_like, "mode": "create"},
-        )
+        db,
+        request,
+        current_user.id,
+        action="file_page_create",
+        entity="file_page",
+        entity_id=str(file_id),
+        meta={"has_description": bool(payload.description)},
+    )
 
     return FilePageOut(
         minio_object_id=str(page.minio_object_id),
@@ -93,14 +93,14 @@ def update_file_page(
     db.commit()
     db.refresh(page)
     write_audit(
-            db,
-            request,
-            current_user.id,
-            action="file_like_set",
-            entity="file_like",
-            entity_id=str(file_id),
-            meta={"is_like": payload.is_like, "mode": "create"},
-        )
+        db,
+        request,
+        current_user.id,
+        action="file_page_update",
+        entity="file_page",
+        entity_id=str(file_id),
+        meta={"has_description": payload.description is not None},
+    )
 
     return FilePageOut(
         minio_object_id=str(page.minio_object_id),
